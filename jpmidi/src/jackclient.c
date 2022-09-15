@@ -101,6 +101,7 @@ int jackclient_close()
     return 0;
 }
 
+jack_nframes_t g_frame = 0;
 /** jpmidi's jack client process() thread logic. */
 int process(jack_nframes_t nframes, void *arg)
 {
@@ -156,6 +157,7 @@ int process(jack_nframes_t nframes, void *arg)
     prev_state = state;
     
     if (state != JackTransportRolling) return 0; // We don't do anything if the transport is not rolling.
+    static int count = 0;
 
     // Do we need to seek within our own midi data to sync the playback position?
     if (current_time == NULL || expected_frame != transport_pos.frame)
@@ -202,12 +204,21 @@ int process(jack_nframes_t nframes, void *arg)
             unsigned char* buffer = jack_midi_event_reserve(port_buf, time_in_cycle, jpmidi_event_get_data_length(event));
 
             unsigned char* data = jpmidi_event_get_data( event);
+            int chan = data[0] & 0xf;
+            if (chan == 14) {
+            printf("#%3d g_f=%d i=%d ", count, (int)g_frame, i);
+            int noteon = (data[0] & 0x90) == 0x90;
+            int freq = data[1];
+            printf("Sending NOTE %s %d at %d\n", noteon ? "ON" : "OFF", freq, (int)time_in_cycle);
+            }
             for (j = 0; j < jpmidi_event_get_data_length(event); j++)
                 buffer[j] = data[j];
         }
 
         current_time = jpmidi_time_get_next( current_time);
     }
+    g_frame = expected_frame;
+    count++;
     
     return 0;
 }
